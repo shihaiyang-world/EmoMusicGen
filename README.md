@@ -2,10 +2,13 @@
 
 
 有几个需要做的
-1. 选择带有情绪的MIDI数据集  
-2. 预处理MIDI数据集
-3. 训练模型
-4. 生成音乐   旋律文件转MIDI  或者直接生成MIDI
+1. 选择带有情绪的MIDI数据集   ✅
+2. 预处理MIDI数据集    ✅  co-representation中已经处理好了
+3. 训练模型      
+   1. 先用**Transformer**能复现出来；  **embedding**  **encoder**  **decoder**  attention   ✅
+   2. 加入CVAE模型   encoder decoder reparameterization  kl_loss  
+   3. 加入情绪  用情绪标签来训练模型
+4. 生成音乐   旋律文件转MIDI  或者直接生成MIDI ✅
    1. 加入情绪  胶囊？  把一段脑电识别后，保存情绪胶囊，然后生成音乐的时候，加入情绪胶囊 （常规的操作是根据情绪条件，效价唤醒的正负来影响音乐，我们认为这样选择太少，我们基于情绪胶囊来选择音乐，原生带有概率，信息更加丰富）
    2. 
 5. 保存转wav  ✅这个已经知道如何做
@@ -130,6 +133,8 @@ Compute the context vector: C = V*A
 word2vec 
 emoChord2vec
 
+
+
 tokenizer
 
 train
@@ -144,5 +149,31 @@ MECTGan
 
 
 
+### Paper [Transformer-based Conditional Variational Autoencoder for Controllable Story Generation](https://arxiv.org/abs/2101.00828)
+
+有VAE的论文介绍，参考
+
+
+### Paper: [Autoregressive Image Generation using Residual Quantization (CVPR 2022)](https://github.com/kakaobrain/rq-vae-transformer)
+
+
+
+### Paper:[TVAE](https://www.ijcai.org/proceedings/2019/0727.pdf)
+
+结构一样，可以借鉴一写描述语句
+
+
+### Paper: [对话生成TVAE Dialogue Generation](https://arxiv.org/abs/2210.12326)
+
+2022年
+
+![img_1.png](img_1.png)
+
+
+
+### Paper:[Generating music with sentiment using Transformer-GANs](https://ar5iv.labs.arxiv.org/html/2212.11134?_immersive_translate_auto_translate=1)  [Code](https://github.com/amazon-science/transformer-gan/blob/main/model/transformer_gan.py)
+
+![img_3.png](img_3.png)
+![img_4.png](img_4.png)git commit -m "add Lea.pth"
 
 

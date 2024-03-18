@@ -31,13 +31,13 @@ from utils import write_midi, get_random_string
 ################################################################################
 
 parser = ArgumentParser()
-parser.add_argument("--mode",default="inference",type=str,choices=["train", "inference"])
+parser.add_argument("--mode",default="train",type=str,choices=["train", "inference"])
 parser.add_argument("--task_type",default="4-cls",type=str,choices=['4-cls', 'Arousal', 'Valence', 'ignore'])
 parser.add_argument("--gid", default= 0, type=int)
 parser.add_argument("--data_parallel", default= 0, type=int)
 
 parser.add_argument("--exp_name", default='output' , type=str)
-parser.add_argument("--load_ckt", default="output", type=str)   #pre-train model
+parser.add_argument("--load_ckt", default='none', type=str, choices=['none', 'output'])   #pre-train model  output
 parser.add_argument("--load_ckt_loss", default="60", type=str)     #pre-train model
 parser.add_argument("--path_train_data", default='emopia', type=str)  
 parser.add_argument("--data_root", default='../co-representation/', type=str)
@@ -128,18 +128,16 @@ if args.data_parallel == 0:
 
 
 class PEmoDataset(Dataset):
-    def __init__(self,
-                 
-                 task_type):
+    def __init__(self,task_type):
 
         self.train_data = np.load(path_train_data)
-        self.train_x = self.train_data['x']
-        self.train_y = self.train_data['y']
+        self.train_x = self.train_data['x'] # shape(1052, 1024, 8)  1052 首歌, 1024 个时间步, 8 个特征
+        self.train_y = self.train_data['y'] # shape(1052, 1024, 8)  1052 首歌, 1024 个时间步, 8 个特征   train_y[x] = train_x[x+1]  是下一个时间步预测
         self.train_mask = self.train_data['mask']
         
         if task_type != 'ignore':
         
-            self.cls_idx = np.load(path_train_data_cls_idx)
+            self.cls_idx = np.load(path_train_data_cls_idx)  # 四个类别的索引
             self.cls_1_idx = self.cls_idx['cls_1_idx']
             self.cls_2_idx = self.cls_idx['cls_2_idx']
             self.cls_3_idx = self.cls_idx['cls_3_idx']
@@ -154,13 +152,13 @@ class PEmoDataset(Dataset):
                 self.label_transfer('Valence')
 
 
-        self.train_x = torch.from_numpy(self.train_x).long()
+        self.train_x = torch.from_numpy(self.train_x).long() # np转tensor
         self.train_y = torch.from_numpy(self.train_y).long()
         self.train_mask = torch.from_numpy(self.train_mask).float()
 
 
-        self.seq_len = self.train_x.shape[1]
-        self.dim = self.train_x.shape[2]
+        self.seq_len = self.train_x.shape[1]  # 序列长度 1024
+        self.dim = self.train_x.shape[2]  # 维度 8
         
         print('train_x: ', self.train_x.shape)
 

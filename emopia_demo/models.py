@@ -52,6 +52,7 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, x):
+        # 计算每句话每个词的位置编码
         x = x + self.pe[:, :x.size(1), :]
         return self.dropout(x)
 
@@ -62,7 +63,8 @@ class TransformerModel(nn.Module):
         super(TransformerModel, self).__init__()
         self.data_parallel = data_parallel
         # --- params config --- #
-        self.n_token = n_token     # == n_class
+        self.n_token = n_token     # == n_class  这是一个数组，记录每个特征的类别数 比如chord有5类n_token[chord]=5  这个会作为embedding第一个参数 词典长度
+        # d_model 是指 隐向量长度 最后会全连接到这个维度
         self.d_model = D_MODEL 
         self.n_layer = N_LAYER #
         self.dropout = 0.1
@@ -91,7 +93,7 @@ class TransformerModel(nn.Module):
         self.pos_emb            = PositionalEncoding(self.d_model, self.dropout)
 
         
-        # linear 
+        # linear  最后特征全连接到这个d_model长度 隐向量
         self.in_linear = nn.Linear(np.sum(self.emb_sizes), self.d_model)
 
          # encoder
@@ -119,7 +121,7 @@ class TransformerModel(nn.Module):
         self.proj_emotion = nn.Linear(self.d_model, self.n_token[7])
         if len(self.n_token) == 9:
             self.proj_key = nn.Linear( self.d_model, self.n_token[8])
-        
+
 
     def compute_loss(self, predict, target, loss_mask):
         if self.data_parallel:
@@ -241,8 +243,8 @@ class TransformerModel(nn.Module):
         
             embs = torch.cat(
                 [
-                    emb_tempo,
-                    emb_chord,
+                    emb_tempo, #(1,128)
+                    emb_chord, # (1,256)
                     emb_barbeat,
                     emb_type,
                     emb_pitch,
@@ -250,7 +252,7 @@ class TransformerModel(nn.Module):
                     emb_velocity,
                     emb_emotion,
                     emb_key
-                ], dim=-1)
+                ], dim=-1)  # 沿最后一维操作, 叠加为 (1, 1024)大约   就是全追加起来了
 
         else:
             embs = torch.cat(
@@ -266,7 +268,7 @@ class TransformerModel(nn.Module):
                 
                 ], dim=-1)
 
-
+        # 全连接 把特征堆叠在一起后，跟n_model全连接
         emb_linear = self.in_linear(embs)
         pos_emb = self.pos_emb(emb_linear)
         
@@ -275,7 +277,7 @@ class TransformerModel(nn.Module):
         layer_outputs = []
         # transformer
         if is_training:
-            # mask
+            # mask 邻接矩阵  句子中词是否mask
             attn_mask = TriangularCausalMask_local(pos_emb.size(1), device=x.device)
 
             h = self.transformer_encoder(pos_emb, attn_mask) # y: b x s x d_model
