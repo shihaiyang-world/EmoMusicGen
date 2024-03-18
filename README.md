@@ -174,6 +174,6 @@ MECTGan
 ### Paper:[Generating music with sentiment using Transformer-GANs](https://ar5iv.labs.arxiv.org/html/2212.11134?_immersive_translate_auto_translate=1)  [Code](https://github.com/amazon-science/transformer-gan/blob/main/model/transformer_gan.py)
 
 ![img_3.png](img_3.png)
-![img_4.png](img_4.png)git commit -m "add Lea.pth"
+![img_4.png](img_4.png)
 
 
