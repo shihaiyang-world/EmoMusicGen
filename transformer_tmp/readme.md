@@ -86,3 +86,11 @@ class EncoderDecoder(nn.Module):
 
 nn.Linear **本质就是由一个特征空间线性变换到另一个特征空间。**
 目标空间中的任一维——也就是隐层的一个cell——都认为会受到源空间的每一维的影响。不考虑严谨，可以说，目标向量是源向量的加权和。
+
+
+
+
+
+
+![img_1.png](img_1.png)
+MultiAttention 代码 单独拎出去
