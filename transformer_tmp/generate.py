@@ -112,7 +112,7 @@ def generate():
     init_t = torch.from_numpy(init).long().cuda()
     inp = init_t.unsqueeze(0)
 
-    for step in range(1, 100):
+    for step in range(1, 1000):
         # 采样类型
         y_tempo, y_chord, y_type, y_barbeat, y_pitch, y_duration, y_velocity, y_emotion = transformer_model.forward(inp[:,:-1,:], inp[:,1:,:])
         cur_word_type = utils.sampling(y_type, p=0.90, is_training=is_training)
@@ -124,7 +124,8 @@ def generate():
         cur_word_duration = utils.sampling(y_duration, t=2, p=0.9, is_training=is_training)
         cur_word_velocity = utils.sampling(y_velocity, t=5, is_training=is_training)
 
-        cur_word_emotion =utils.sampling(y_emotion, t=1, is_training=is_training)
+        # cur_word_emotion =utils.sampling(y_emotion, t=1, is_training=is_training)
+        cur_word_emotion = 0
         next_arr = np.array([
             cur_word_tempo,
             cur_word_chord,
@@ -150,6 +151,7 @@ def generate():
     inp = inp.squeeze().cpu().detach().numpy()
     np.save(path_outfile + '.npy', inp)
     utils.write_midi(inp, path_outfile + '.mid', word2event)
+    print('save to:', path_outfile + '.mid')
         #
     song_time = time.time() - start_time
     word_len = len(inp)
