@@ -141,24 +141,6 @@ class CTCVAE(nn.Module):
         return loss_tempo, loss_chord, loss_barbeat, loss_type, loss_pitch, loss_duration, loss_velocity, loss_emotion
 
 
-    # VAE 重参数化
-    def reparameterize(self, mu, logvar):
-        std = torch.exp(0.5*logvar)
-        # 随机一个
-        eps = torch.randn_like(std)
-        return mu + eps*std
-
-    # VAE 带KL散度 loss
-    def loss_function(recon_x, x, mu, logvar):
-        # 判断是真或假
-        BCE = F.binary_cross_entropy(recon_x, x.view(-1, 784), reduction='sum')
-        # see Appendix B from VAE paper:
-        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
-        # https://arxiv.org/abs/1312.6114
-        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        return BCE + KLD
-
 
     # 计算出  隐向量
     def forward_hidden(self, x, memory=None, is_training=True):

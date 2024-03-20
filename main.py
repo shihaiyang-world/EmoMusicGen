@@ -20,7 +20,7 @@ import json
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--status', default='generate', choices=['train','generate'])
+parser.add_argument('--status', default='train', choices=['train','generate'])
 parser.add_argument('--msg', default='_')
 parser.add_argument('--epoch', default=100, type=int)
 parser.add_argument('--batch_size', default=4)
