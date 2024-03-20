@@ -18,7 +18,8 @@ from public_layer import network_paras
 from models import TransformerModel
 import time, datetime
 import saver
-
+import utils
+import json
 
 import argparse
 parser = argparse.ArgumentParser(description='PyTorch Transformer')
@@ -26,13 +27,20 @@ parser.add_argument("--path_train_data", default='emopia', type=str)
 parser.add_argument("--data_root", default='../co-representation/', type=str)
 parser.add_argument("--load_dict", default="dictionary.pkl", type=str)
 parser.add_argument("--exp_name", default='output' , type=str)
+parser.add_argument("--path_gendir", default='midigen' , type=str)
+parser.add_argument("--emo_tag", default=2, type=int)
 args = parser.parse_args()
 
 path_data_root = args.data_root
 path_exp = 'exp/' + args.exp_name
+path_gendir = 'exp/' + args.path_gendir
+emotion_tag = args.emo_tag
 epochs = 10
 batch_size = 32
 D_MODEL = 512
+HEADS = 8
+ENCODER_LAYER = 2
+DECODER_LAYER = 2
 learning_rate = 0.0001
 
 path_train_data = os.path.join(path_data_root, args.path_train_data + '_data.npz')
@@ -80,7 +88,7 @@ def train():
     emb_sizes = [128, 256, 64, 32, 512, 128, 128, 128]
 
     # 定义模型
-    transformer_model = TransformerModel(D_MODEL, 8, 2, 2, emb_sizes, n_class)
+    transformer_model = TransformerModel(D_MODEL, HEADS, ENCODER_LAYER, DECODER_LAYER, emb_sizes, n_class)
     transformer_model.cuda()
     transformer_model.train()
     n_parameters = network_paras(transformer_model)
@@ -124,14 +132,8 @@ def train():
     print('Train Finished, Model saved.')
 
 
-def generate():
-    pass
-
-
 
 
 
 if __name__ == '__main__':
     train()
-
-    generate()
