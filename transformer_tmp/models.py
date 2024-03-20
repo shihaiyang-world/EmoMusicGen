@@ -125,8 +125,6 @@ class TransformerModel(nn.Module):
         for dec_layer in self.decoder_layers:
             dec_output = dec_layer(dec_output, enc_output_memory, None, tgt_mask)
 
-        # 最后过一层softmax  因为是多个embedding在一起，用多个proj计算所有的loss
-        # output = self.fc(dec_output)
 
         # decoder 重构出来的结果，这个结果与真实目标target对比，产生loss
         y_tempo, y_chord, y_type, y_barbeat, y_pitch, y_duration, y_velocity, y_emotion = self.forward_output(dec_output)
@@ -142,6 +140,7 @@ class TransformerModel(nn.Module):
         y_emotion = y_emotion[:, ...].permute(0, 2, 1)
 
         # loss
+        # 最后过一层softmax  因为是多个embedding在一起，用多个proj计算所有的loss  取平均
         loss_tempo = self.compute_loss(y_tempo, tgt[..., 0], loss_mask)
         loss_chord = self.compute_loss(y_chord, tgt[..., 1], loss_mask)
         loss_barbeat = self.compute_loss(y_barbeat, tgt[..., 2], loss_mask)

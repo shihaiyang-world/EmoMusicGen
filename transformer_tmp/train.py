@@ -16,6 +16,8 @@ from data_processor import PEmoDataset
 import os
 from public_layer import network_paras
 from models import TransformerModel
+import time, datetime
+import saver
 
 
 import argparse
@@ -23,9 +25,11 @@ parser = argparse.ArgumentParser(description='PyTorch Transformer')
 parser.add_argument("--path_train_data", default='emopia', type=str)
 parser.add_argument("--data_root", default='../co-representation/', type=str)
 parser.add_argument("--load_dict", default="dictionary.pkl", type=str)
+parser.add_argument("--exp_name", default='output' , type=str)
 args = parser.parse_args()
 
 path_data_root = args.data_root
+path_exp = 'exp/' + args.exp_name
 epochs = 10
 batch_size = 32
 D_MODEL = 512
@@ -60,10 +64,14 @@ def train():
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(myseed)
 
+    start_time = time.time()
     # 加载数据集
     dictionary = pickle.load(open(path_dictionary, 'rb'))
     event2word, word2event = dictionary
     train_loader = prep_dataloader(batch_size)
+
+    # create saver  保存模型，loss等
+    saver_agent = saver.Saver(path_exp)
 
     n_class = []  # number of classes of each token. [56, 127, 18, 4, 85, 18, 41, 5]  with key: [... , 25]
     for key in event2word.keys():
@@ -83,6 +91,7 @@ def train():
     for epoch in range(1, epochs):
 
         num_batch = len(train_loader)
+        epoch_loss = 0
 
         for i, (src_seq, tgt_seq, mask) in enumerate(train_loader):
             src_seq = src_seq.cuda()
@@ -99,13 +108,24 @@ def train():
             loss.backward()
             optimizer.step()
 
-            print('epoch:{}/{}  batch:{}/{} | Loss: {:06f} \r'.format((epoch+1), epochs, i, num_batch, loss))
+            epoch_loss += loss.item()
+
+            print('epoch:{}/{}  batch:{}/{} | Loss: {:06f} \r'.format((epoch), epochs, i, num_batch, loss))
+
+        # epoch loss
+        runtime = time.time() - start_time
+        epoch_loss = epoch_loss / num_batch
+        print('------------------------------------')
+        print('epoch: {}/{} | Loss: {} | time: {}'.format(
+            epoch, epoch, epoch_loss, str(datetime.timedelta(seconds=runtime))))
+
+    # save model, with policy  保存模型
+    saver_agent.save_model(transformer_model, name='loss_high')
+    print('Train Finished, Model saved.')
 
 
-
-
-
-
+def generate():
+    pass
 
 
 
@@ -113,3 +133,5 @@ def train():
 
 if __name__ == '__main__':
     train()
+
+    generate()
