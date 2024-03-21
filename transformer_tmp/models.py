@@ -9,6 +9,7 @@ import numpy as np
 import math
 import utils
 import torch.nn.functional as F
+from fast_transformers.builders import RecurrentDecoderBuilder as RecurrentDecoderBuilder_local
 
 class Embeddings(nn.Module):
     def __init__(self, n_token, d_model):
@@ -57,10 +58,10 @@ class DecoderLayer(nn.Module):
         self.norm2 = nn.LayerNorm(d_model)
         self.norm3 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
-    def forward(self, x, enc_output, src_mask, tgt_mask):
+    def forward(self, x, memory, src_mask, tgt_mask):
         attn_output = self.self_attn(x, x, x, tgt_mask)
         x = self.norm1(x + self.dropout(attn_output))
-        attn_output = self.cross_attn(x, enc_output, enc_output, src_mask)
+        attn_output = self.cross_attn(x, memory, memory, src_mask)
         x = self.norm2(x + self.dropout(attn_output))
         ff_output = self.feed_forward(x)
         x = self.norm3(x + self.dropout(ff_output))
@@ -70,14 +71,27 @@ class DecoderLayer(nn.Module):
 class TransformerModel(nn.Module):
     def __init__(self, d_model, nhead, num_encoder_layers, num_decoder_layers, emb_sizes, n_class, dropout=0.1, d_ff=2048, is_training=True):
         super(TransformerModel, self).__init__()
-        # d_ff 最后一层位置前馈网络中内层的维数
-        self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, nhead, d_ff, dropout) for _ in range(num_encoder_layers)])
-        self.decoder_layers = nn.ModuleList([DecoderLayer(d_model, nhead, d_ff, dropout) for _ in range(num_decoder_layers)])
-
         self.n_class = n_class
         self.emb_sizes = emb_sizes
         self.d_model = d_model
         self.is_training = is_training
+        self.n_head = nhead
+
+        # d_ff 最后一层位置前馈网络中内层的维数
+        # if is_training:
+        self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, nhead, d_ff, dropout) for _ in range(num_encoder_layers)])
+        self.decoder_layers = nn.ModuleList([DecoderLayer(d_model, nhead, d_ff, dropout) for _ in range(num_decoder_layers)])
+        # else:
+        #     self.decoder_layers = RecurrentDecoderBuilder_local.from_kwargs(
+        #         n_layers=num_decoder_layers,
+        #         n_heads=nhead,
+        #         query_dimensions=self.d_model // self.n_head,
+        #         value_dimensions=self.d_model // self.n_head,
+        #         feed_forward_dimensions=d_ff,
+        #         activation='gelu',
+        #         dropout=0.1,
+        #     ).get()
+
 
         self.word_emb_tempo = Embeddings(self.n_class[0], self.emb_sizes[0])
         self.word_emb_chord = Embeddings(self.n_class[1], self.emb_sizes[1])
@@ -87,6 +101,12 @@ class TransformerModel(nn.Module):
         self.word_emb_duration = Embeddings(self.n_class[5], self.emb_sizes[5])
         self.word_emb_velocity = Embeddings(self.n_class[6], self.emb_sizes[6])
         self.word_emb_emotion = Embeddings(self.n_class[7], self.emb_sizes[7])
+
+
+
+        # blend with type
+        self.project_concat_type = nn.Linear(self.d_model + 32, self.d_model)
+
 
         self.linear = nn.Linear(np.sum(emb_sizes), d_model)
         self.posAtten = PositionalEncoding(d_model)
@@ -109,14 +129,15 @@ class TransformerModel(nn.Module):
         subsequent_mask = torch.triu(torch.ones(attn_shape), diagonal=1)
         return subsequent_mask
 
-    def forward(self, src, tgt, loss_mask=None):
-        # 定义src_mask，即所有的词都是有效的，没有填充词
-        # src_mask = torch.ones(src.size(0), src.size(1), src.size(2))
+    def encode(self, src):
         src_embedded = self.common_embedding(src)
         enc_output_memory = src_embedded
         for enc_layer in self.encoder_layers:
             enc_output_memory = enc_layer(enc_output_memory, None)
 
+        return enc_output_memory
+
+    def decode(self, tgt, memory=None, is_training=True):
         # encoder层  src的输出作为decoder的输入
         tgt_mask = None
         if self.is_training:
@@ -124,23 +145,34 @@ class TransformerModel(nn.Module):
             tgt_mask = tgt_mask.cuda()
         tgt_embedded = self.common_embedding(tgt)
 
-        # decoder层  tgt的embedding，encoder的输出作为memory作为输入
+        # if is_training:
+            # decoder层  tgt的embedding，encoder的输出作为memory作为输入
         dec_output = tgt_embedded
         for dec_layer in self.decoder_layers:
-            dec_output = dec_layer(dec_output, enc_output_memory, None, tgt_mask)
+            dec_output = dec_layer(dec_output, memory, None, tgt_mask)
+        return dec_output, None
+        # else:
+        #     dec_output, state = self.decoder_layers(tgt_embedded, memory)
+        #     return dec_output, state
+
+
+    def forward(self, src, tgt, loss_mask=None):
+        # 定义src_mask，即所有的词都是有效的，没有填充词
+        # src_mask = torch.ones(src.size(0), src.size(1), src.size(2))
+        encoder_memory = self.encode(src)
+
+        # 预测生成时，返回的是最后一个时间步的结果，而不是loss
+        y_tempo, y_chord, y_type, y_barbeat, y_pitch, y_duration, y_velocity, y_emotion, state = self.decode_and_output(tgt, encoder_memory)
 
 
         # decoder 重构出来的结果，这个结果与真实目标target对比，产生loss
         if self.is_training:
-            # training 计算loss返回
-            y_tempo, y_chord, y_type, y_barbeat, y_pitch, y_duration, y_velocity, y_emotion = self.forward_output(
-                dec_output)
             # 计算loss的逻辑
             # reshape (b, s, f) -> (b, f, s)
             y_tempo = y_tempo[:, ...].permute(0, 2, 1)
             y_chord = y_chord[:, ...].permute(0, 2, 1)
-            y_barbeat = y_barbeat[:, ...].permute(0, 2, 1)
             y_type = y_type[:, ...].permute(0, 2, 1)
+            y_barbeat = y_barbeat[:, ...].permute(0, 2, 1)
             y_pitch = y_pitch[:, ...].permute(0, 2, 1)
             y_duration = y_duration[:, ...].permute(0, 2, 1)
             y_velocity = y_velocity[:, ...].permute(0, 2, 1)
@@ -149,8 +181,8 @@ class TransformerModel(nn.Module):
             # 最后过一层softmax  因为是多个embedding在一起，用多个proj计算所有的loss  取平均
             loss_tempo = self.compute_loss(y_tempo, tgt[..., 0], loss_mask)
             loss_chord = self.compute_loss(y_chord, tgt[..., 1], loss_mask)
-            loss_barbeat = self.compute_loss(y_barbeat, tgt[..., 2], loss_mask)
             loss_type = self.compute_loss(y_type, tgt[..., 3], loss_mask)
+            loss_barbeat = self.compute_loss(y_barbeat, tgt[..., 2], loss_mask)
             loss_pitch = self.compute_loss(y_pitch, tgt[..., 4], loss_mask)
             loss_duration = self.compute_loss(y_duration, tgt[..., 5], loss_mask)
             loss_velocity = self.compute_loss(y_velocity, tgt[..., 6], loss_mask)
@@ -159,9 +191,7 @@ class TransformerModel(nn.Module):
             # 返回各个Loss
             return loss_tempo, loss_chord, loss_barbeat, loss_type, loss_pitch, loss_duration, loss_velocity, loss_emotion
         else:
-            # 预测生成时，返回的是最后一个时间步的结果，而不是loss
-            y_tempo, y_chord, y_type, y_barbeat, y_pitch, y_duration, y_velocity, y_emotion = self.forward_output(
-                dec_output)
+            # 生成 ，返回的是比例分布
             y_tempo = y_tempo[:, -1, :].unsqueeze(0)
             y_chord = y_chord[:, -1, :].unsqueeze(0)
             y_type = y_type[:, -1, :].unsqueeze(0)
@@ -170,22 +200,36 @@ class TransformerModel(nn.Module):
             y_duration = y_duration[:, -1, :].unsqueeze(0)
             y_velocity = y_velocity[:, -1, :].unsqueeze(0)
             y_emotion = y_emotion[:, -1, :].unsqueeze(0)
-            return nn.Softmax(dim=-1)(y_tempo), nn.Softmax(dim=-1)(y_chord), nn.Softmax(dim=-1)(y_type), nn.Softmax(dim=-1)(y_barbeat), nn.Softmax(dim=-1)(y_pitch), nn.Softmax(dim=-1)(y_duration), nn.Softmax(dim=-1)(y_velocity), nn.Softmax(dim=-1)(y_emotion)
+            return nn.Softmax(dim=-1)(y_tempo), nn.Softmax(dim=-1)(y_chord), nn.Softmax(dim=-1)(y_type), nn.Softmax(dim=-1)(y_barbeat), nn.Softmax(dim=-1)(y_pitch), nn.Softmax(dim=-1)(y_duration), nn.Softmax(dim=-1)(y_velocity), nn.Softmax(dim=-1)(y_emotion), state
 
-
-    def forward_output(self, decoder_outputs):
-        # project other  沿着最后一维堆叠
-        # individual output  做了一个全连接
-        y_tempo = self.proj_tempo(decoder_outputs)
-        y_chord = self.proj_chord(decoder_outputs)
+    # 这里确实需要一个type加强一下，要不然生成的乱七八糟啊。
+    def decode_and_output(self, tgt, state):
+        if self.is_training:
+            decoder_outputs, _ = self.decode(tgt, memory=state)
+        else:
+            # tgt = tgt.squeeze(0)
+            decoder_outputs, state = self.decode(tgt, memory=state, is_training=False)
         y_type = self.proj_type(decoder_outputs)
-        y_barbeat = self.proj_barbeat(decoder_outputs)
-        y_pitch = self.proj_pitch(decoder_outputs)
-        y_duration = self.proj_duration(decoder_outputs)
-        y_velocity = self.proj_velocity(decoder_outputs)
-        y_emotion = self.proj_emotion(decoder_outputs)
 
-        return y_tempo, y_chord, y_type, y_barbeat, y_pitch, y_duration, y_velocity, y_emotion
+        '''
+        for training
+        '''
+        # tf_skip_emption = self.word_emb_emotion(y[..., 7])
+        tf_skip_type = self.word_emb_type(tgt[..., 3])
+
+        # project other  沿着最后一维堆叠  增强一下type
+        encoder_cat_type = torch.cat([decoder_outputs, tf_skip_type], dim=-1)
+        y_ = self.project_concat_type(encoder_cat_type)
+
+        # individual output  做了一个全连接
+        y_tempo = self.proj_tempo(y_)
+        y_chord = self.proj_chord(y_)
+        y_barbeat = self.proj_barbeat(y_)
+        y_pitch = self.proj_pitch(y_)
+        y_duration = self.proj_duration(y_)
+        y_velocity = self.proj_velocity(y_)
+        y_emotion = self.proj_emotion(y_)
+        return y_tempo, y_chord, y_type, y_barbeat, y_pitch, y_duration, y_velocity, y_emotion, state
 
     def compute_loss(self, predict, target, loss_mask=None):
         loss = self.loss_func(predict, target)

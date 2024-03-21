@@ -177,3 +177,14 @@ MECTGan
 ![img_4.png](img_4.png)
 
 
+
+### Paper: [Action-Conditioned 3D Human Motion Synthesis with Transformer VAE](https://arxiv.org/pdf/2104.05670.pdf)  [Code](https://github.com/Mathux/ACTOR/tree/master)
+
+ICCV 2021
+
+Transformer VAE  Conditioned
+
+![img_5.png](img_5.png)
+
+参考一下图片
+

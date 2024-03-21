@@ -28,7 +28,7 @@ parser.add_argument("--data_root", default='../co-representation/', type=str)
 parser.add_argument("--load_dict", default="dictionary.pkl", type=str)
 parser.add_argument("--exp_name", default='output' , type=str)
 parser.add_argument("--path_gendir", default='midigen' , type=str)
-parser.add_argument("--emo_tag", default=2, type=int)
+parser.add_argument("--emo_tag", default=1, type=int)
 args = parser.parse_args()
 
 path_data_root = args.data_root
@@ -112,17 +112,42 @@ def generate():
     init_t = torch.from_numpy(init).long().cuda()
     inp = init_t.unsqueeze(0)
 
+    classes = word2event.keys()
+    def print_word_cp(cp):
+        result = [word2event[k][cp[idx]] for idx, k in enumerate(classes)]
+        for r in result:
+            print('{:15s}'.format(str(r)), end=' | ')
+        print('')
+
+    cnt_bar = 0
+
+    # 采样类型
     for step in range(1, 1000):
         # 采样类型
-        y_tempo, y_chord, y_type, y_barbeat, y_pitch, y_duration, y_velocity, y_emotion = transformer_model.forward(inp[:,:-1,:], inp[:,1:,:])
-        cur_word_type = utils.sampling(y_type, p=0.90, is_training=is_training)
+        memory = transformer_model.encode(inp)
+        y_tempo, y_chord, y_type, y_barbeat, y_pitch, y_duration, y_velocity, y_emotion, state = transformer_model.decode_and_output(inp, memory)
 
-        cur_word_tempo = utils.sampling(y_tempo, t=1.2, p=0.9, is_training=is_training)
-        cur_word_barbeat = utils.sampling(y_barbeat, t=1.2, is_training=is_training)
-        cur_word_chord = utils.sampling(y_chord, p=0.99, is_training=is_training)
-        cur_word_pitch = utils.sampling(y_pitch, p=0.9, is_training=is_training)
-        cur_word_duration = utils.sampling(y_duration, t=2, p=0.9, is_training=is_training)
-        cur_word_velocity = utils.sampling(y_velocity, t=5, is_training=is_training)
+        y_tempo = y_tempo[:, -1, :].unsqueeze(0)
+        y_chord = y_chord[:, -1, :].unsqueeze(0)
+        y_type = y_type[:, -1, :].unsqueeze(0)
+        y_barbeat = y_barbeat[:, -1, :].unsqueeze(0)
+        y_pitch = y_pitch[:, -1, :].unsqueeze(0)
+        y_duration = y_duration[:, -1, :].unsqueeze(0)
+        y_velocity = y_velocity[:, -1, :].unsqueeze(0)
+        y_emotion = y_emotion[:, -1, :].unsqueeze(0)
+        y_tempo, y_chord, y_type, y_barbeat, y_pitch, y_duration, y_velocity, y_emotion = nn.Softmax(dim=-1)(y_tempo), nn.Softmax(dim=-1)(y_chord), nn.Softmax(dim=-1)(y_type), nn.Softmax(dim=-1)(
+            y_barbeat), nn.Softmax(dim=-1)(y_pitch), nn.Softmax(dim=-1)(y_duration), nn.Softmax(dim=-1)(
+            y_velocity), nn.Softmax(dim=-1)(y_emotion)
+
+
+        cur_word_type = utils.sampling(y_type, p=0.90, is_training=is_training)
+        # 温度采样  softmax   temperature越大，越随机(超出原来的概率分布范围)，越小，越确定(接近原来的概率分布范围)
+        cur_word_tempo = utils.sampling(y_tempo, t=0.9, p=0.9, is_training=is_training)
+        cur_word_barbeat = utils.sampling(y_barbeat, t=0.9, is_training=is_training)
+        cur_word_chord = utils.sampling(y_chord, p=0.1, is_training=is_training)
+        cur_word_pitch = utils.sampling(y_pitch, p=0.1, is_training=is_training)
+        cur_word_duration = utils.sampling(y_duration, t=0.9, p=0.9, is_training=is_training)
+        cur_word_velocity = utils.sampling(y_velocity, t=0.9, is_training=is_training)
 
         # cur_word_emotion =utils.sampling(y_emotion, t=1, is_training=is_training)
         cur_word_emotion = 0
@@ -136,6 +161,16 @@ def generate():
             cur_word_velocity,
             cur_word_emotion
         ])
+
+        print('bar:', cnt_bar, end='  ==')
+        print_word_cp(next_arr)
+        if word2event['type'][next_arr[3]] == 'EOS':
+            continue
+
+        if word2event['bar-beat'][next_arr[2]] == 'Bar':
+            cnt_bar += 1
+
+        # cuda
         arr = torch.from_numpy(next_arr).long().cuda()
         arr = arr.unsqueeze(0).unsqueeze(0)
         inp = torch.cat(
@@ -157,22 +192,6 @@ def generate():
     word_len = len(inp)
     print('song time:', song_time)
     print('word_len:', word_len)
-        # words_len_list.append(word_len)
-        # song_time_list.append(song_time)
-        #
-        #
-        # print('ave token time:', sum(words_len_list) / sum(song_time_list))
-        # print('ave song time:', np.mean(song_time_list))
-        #
-        # runtime_result = {
-        #     'song_time': song_time_list,
-        #     'words_len_list': words_len_list,
-        #     'ave token time:': sum(words_len_list) / sum(song_time_list),
-        #     'ave song time': float(np.mean(song_time_list)),
-        # }
-        #
-        # with open('runtime_stats.json', 'w') as f:
-        #     json.dump(runtime_result, f)
 
 
 

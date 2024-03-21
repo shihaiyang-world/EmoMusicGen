@@ -29,13 +29,14 @@ parser.add_argument("--load_dict", default="dictionary.pkl", type=str)
 parser.add_argument("--exp_name", default='output' , type=str)
 parser.add_argument("--path_gendir", default='midigen' , type=str)
 parser.add_argument("--emo_tag", default=2, type=int)
+parser.add_argument('--epoch', default=10, type=int)
 args = parser.parse_args()
 
 path_data_root = args.data_root
 path_exp = 'exp/' + args.exp_name
 path_gendir = 'exp/' + args.path_gendir
 emotion_tag = args.emo_tag
-epochs = 10
+epochs = args.epoch
 batch_size = 32
 D_MODEL = 512
 HEADS = 8
