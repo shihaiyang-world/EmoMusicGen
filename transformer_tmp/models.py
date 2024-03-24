@@ -37,42 +37,6 @@ class PositionWiseFeedForward(nn.Module):
     def forward(self, x):
         return self.fc2(self.relu(self.fc1(x)))
 
-class EncoderLayer(nn.Module):
-    def __init__(self, d_model, num_heads, d_ff, dropout):
-        super(EncoderLayer, self).__init__()
-        self.self_attn = MultiHeadAttention(d_model, num_heads)
-        self.feed_forward = PositionWiseFeedForward(d_model, d_ff)
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, x, mask):
-        attn_output = self.self_attn(x, x, x, mask)
-        x = self.norm1(x + self.dropout(attn_output))
-        ff_output = self.feed_forward(x)
-        x = self.norm2(x + self.dropout(ff_output))
-        return x
-
-
-class DecoderLayer(nn.Module):
-    def __init__(self, d_model, num_heads, d_ff, dropout):
-        super(DecoderLayer, self).__init__()
-        self.self_attn = MultiHeadAttention(d_model, num_heads)
-        self.cross_attn = MultiHeadAttention(d_model, num_heads)
-        self.feed_forward = PositionWiseFeedForward(d_model, d_ff)
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.norm3 = nn.LayerNorm(d_model)
-        self.dropout = nn.Dropout(dropout)
-    def forward(self, x, memory, src_mask, tgt_mask):
-        attn_output = self.self_attn(x, x, x, tgt_mask)
-        x = self.norm1(x + self.dropout(attn_output))
-        attn_output = self.cross_attn(x, memory, memory, src_mask)
-        x = self.norm2(x + self.dropout(attn_output))
-        ff_output = self.feed_forward(x)
-        x = self.norm3(x + self.dropout(ff_output))
-        return x
-
 
 class TransformerModel(nn.Module):
     def __init__(self, d_model, nhead, num_encoder_layers, num_decoder_layers, emb_sizes, n_class, dropout=0.1, d_ff=2048, is_training=True):
@@ -82,32 +46,13 @@ class TransformerModel(nn.Module):
         self.d_model = d_model
         self.is_training = is_training
         self.n_head = nhead
-
         # d_ff 最后一层位置前馈网络中内层的维数
-        # if is_training:
-        # self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, nhead, d_ff, dropout) for _ in range(num_encoder_layers)])
-        # self.decoder_layers = nn.ModuleList([DecoderLayer(d_model, nhead, d_ff, dropout) for _ in range(num_decoder_layers)])
-        # else:
-        self.encoder_layers = TransformerEncoderBuilder_local.from_kwargs(
-                n_layers=num_encoder_layers,
-                n_heads=self.n_head,
-                query_dimensions=self.d_model // self.n_head,
-                value_dimensions=self.d_model // self.n_head,
-                feed_forward_dimensions=2048,
-                activation='gelu',
-                dropout=0.1,
-                attention_type="causal-linear", # 因果mask
-            ).get()
-        self.decoder_layers = TransformerDecoderBuilder_local.from_kwargs(
-            n_layers=num_decoder_layers,
-            n_heads=nhead,
-            query_dimensions=self.d_model // self.n_head,
-            value_dimensions=self.d_model // self.n_head,
-            feed_forward_dimensions=d_ff,
-            activation='gelu',
-            dropout=0.1,
-        ).get()
+        self.d_ff = d_ff
+        self.e_layer = num_encoder_layers
+        self.d_layer = num_decoder_layers
 
+        # encoder
+        self.get_encoder('encoder')
 
         self.word_emb_tempo = Embeddings(self.n_class[0], self.emb_sizes[0])
         self.word_emb_chord = Embeddings(self.n_class[1], self.emb_sizes[1])
@@ -118,17 +63,13 @@ class TransformerModel(nn.Module):
         self.word_emb_velocity = Embeddings(self.n_class[6], self.emb_sizes[6])
         self.word_emb_emotion = Embeddings(self.n_class[7], self.emb_sizes[7])
 
-
-
         # blend with type
         self.project_concat_type = nn.Linear(self.d_model + 32, self.d_model)
-
 
         self.linear = nn.Linear(np.sum(emb_sizes), d_model)
         self.posAtten = PositionalEncoding(d_model)
 
         self.loss_func = nn.CrossEntropyLoss(reduction='none')
-
 
         # individual output
         self.proj_tempo = nn.Linear(self.d_model, self.n_class[0])
@@ -140,35 +81,32 @@ class TransformerModel(nn.Module):
         self.proj_velocity = nn.Linear(self.d_model, self.n_class[6])
         self.proj_emotion = nn.Linear(self.d_model, self.n_class[7])
 
-    def subsequent_mask(self, size):
-        attn_shape = (1, size, size)
-        subsequent_mask = torch.triu(torch.ones(attn_shape), diagonal=1)
-        return subsequent_mask
-
     def encode(self, src, src_mask=None):
         src_embedded = self.common_embedding(src)
-        # mask 邻接矩阵  句子中词是否mask  对角线矩阵
-        attn_mask = TriangularCausalMask_local(src_embedded.size(1), device=src.device)
-        # padding mask改为bool型，1是有数据改为True，0是padding
-        tensor_len = src_mask.sum(dim=1)
-        length_mask = LengthMask_local(tensor_len, max_len=src_mask.size(1), device=src.device)
-        enc_output_memory = self.encoder_layers(src_embedded, attn_mask, length_mask=length_mask)
+        if self.is_training:
+            # mask 邻接矩阵  句子中词是否mask  对角线矩阵 计算因果mask
+            attn_mask = TriangularCausalMask_local(src_embedded.size(1), device=src.device)
+            tensor_len = src_mask.sum(dim=1)
+            length_mask = LengthMask_local(tensor_len, max_len=src_mask.size(1), device=src.device)
+            enc_output_memory = self.encoder(src_embedded, attn_mask, length_mask=length_mask)
+        else:
+            enc_output_memory = self.encoder(src_embedded)
         return enc_output_memory
 
-
-
-    def decode(self, tgt, memory=None, src_mask=None, is_training=True):
-        # encoder层  src的输出作为decoder的输入
-        tgt_mask = None
-        # 计算因果mask
-        if is_training:
-            tgt_mask = TriangularCausalMask_local(tgt.size(1), device=tgt.device)
+    # encoder层  src的输出作为decoder的输入
+    def decode(self, tgt, memory=None, src_mask=None, is_training=True, state=None):
         tgt_embedded = self.common_embedding(tgt)
-        tensor_len = src_mask.sum(dim=1)
-        length_mask = LengthMask_local(tensor_len, max_len=src_mask.size(1), device=tgt.device)
-        dec_output = self.decoder_layers(tgt_embedded, memory, x_mask=tgt_mask, x_length_mask=length_mask)
-        return dec_output, None
-
+        if is_training:
+            # 计算因果mask
+            tgt_mask = TriangularCausalMask_local(tgt.size(1), device=tgt.device)
+            tensor_len = src_mask.sum(dim=1)
+            length_mask = LengthMask_local(tensor_len, max_len=src_mask.size(1), device=tgt.device)
+            dec_output = self.decoder(tgt_embedded, memory, x_mask=tgt_mask, x_length_mask=length_mask)
+            return dec_output, None
+        else:
+            tgt_embedded = tgt_embedded.squeeze(0)
+            dec_output, state = self.decoder(tgt_embedded, memory, state=state)
+            return dec_output, state
 
     # loss_mask 是padding mask，1024长度序列中，没有数据被padding的位置
     def forward(self, src, tgt, loss_mask=None):
@@ -177,7 +115,6 @@ class TransformerModel(nn.Module):
 
         # 预测生成时，返回的是最后一个时间步的结果，而不是loss
         y_tempo, y_chord, y_type, y_barbeat, y_pitch, y_duration, y_velocity, y_emotion, state = self.decode_and_output(tgt, encoder_memory, src_mask=loss_mask)
-
 
         # decoder 重构出来的结果，这个结果与真实目标target对比，产生loss
         if self.is_training:
@@ -217,20 +154,23 @@ class TransformerModel(nn.Module):
             return nn.Softmax(dim=-1)(y_tempo), nn.Softmax(dim=-1)(y_chord), nn.Softmax(dim=-1)(y_type), nn.Softmax(dim=-1)(y_barbeat), nn.Softmax(dim=-1)(y_pitch), nn.Softmax(dim=-1)(y_duration), nn.Softmax(dim=-1)(y_velocity), nn.Softmax(dim=-1)(y_emotion), state
 
     # 这里确实需要一个type加强一下，要不然生成的乱七八糟啊。
-    def decode_and_output(self, tgt, state, src_mask=None):
+    def decode_and_output(self, tgt, memory, src_mask=None, state=None):
         if self.is_training:
-            decoder_outputs, _ = self.decode(tgt, memory=state, src_mask=src_mask, is_training=True)
+            decoder_outputs, _ = self.decode(tgt, memory=memory, src_mask=src_mask, is_training=True)
         else:
             # tgt = tgt.squeeze(0)
-            decoder_outputs, state = self.decode(tgt, memory=state, src_mask=src_mask, is_training=False)
-
+            decoder_outputs, state = self.decode(tgt, memory=memory, src_mask=src_mask, is_training=False, state=state)
         '''
         for training
         '''
         # tf_skip_emption = self.word_emb_emotion(y[..., 7])
         tf_skip_type = self.word_emb_type(tgt[..., 3])
         # project other  沿着最后一维堆叠  增强一下type
-        encoder_cat_type = torch.cat([decoder_outputs, tf_skip_type], dim=-1)
+        if not self.is_training:
+            decoder_outputs = decoder_outputs.unsqueeze(0)
+            encoder_cat_type = torch.cat([decoder_outputs, tf_skip_type], dim=-1)
+        else:
+            encoder_cat_type = torch.cat([decoder_outputs, tf_skip_type], dim=-1)
         y_ = self.project_concat_type(encoder_cat_type)
 
         # individual output  做了一个全连接
@@ -273,7 +213,47 @@ class TransformerModel(nn.Module):
         encoding_input = self.posAtten(embs_)
         return encoding_input
 
+    def get_encoder(self, TYPE):
 
+        if self.is_training:
+            self.encoder = TransformerEncoderBuilder_local.from_kwargs(
+                n_layers=self.e_layer,
+                n_heads=self.n_head,
+                query_dimensions=self.d_model // self.n_head,
+                value_dimensions=self.d_model // self.n_head,
+                feed_forward_dimensions=2048,
+                activation='gelu',
+                dropout=0.1,
+                attention_type="causal-linear",  # 因果mask
+            ).get()
+            self.decoder = TransformerDecoderBuilder_local.from_kwargs(
+                n_layers=self.d_layer,
+                n_heads=self.n_head,
+                query_dimensions=self.d_model // self.n_head,
+                value_dimensions=self.d_model // self.n_head,
+                feed_forward_dimensions=self.d_ff,
+                activation='gelu',
+                dropout=0.1,
+            ).get()
+        else:
+            self.encoder = TransformerEncoderBuilder_local.from_kwargs(
+                n_layers=self.e_layer,
+                n_heads=self.n_head,
+                query_dimensions=self.d_model // self.n_head,
+                value_dimensions=self.d_model // self.n_head,
+                feed_forward_dimensions=2048,
+                activation='gelu',
+                dropout=0.1,
+            ).get()
+            self.decoder = RecurrentDecoderBuilder_local.from_kwargs(
+                n_layers=self.d_layer,
+                n_heads=self.n_head,
+                query_dimensions=self.d_model // self.n_head,
+                value_dimensions=self.d_model // self.n_head,
+                feed_forward_dimensions=self.d_ff,
+                activation='gelu',
+                dropout=0.1,
+            ).get()
 
     def generate_from_scratch(self, dictionary, emotion_tag, key_tag=None, n_token=8, display=True):
         event2word, word2event = dictionary
@@ -281,9 +261,7 @@ class TransformerModel(nn.Module):
         classes = word2event.keys()
 
         def print_word_cp(cp):
-
             result = [word2event[k][cp[idx]] for idx, k in enumerate(classes)]
-
             for r in result:
                 print('{:15s}'.format(str(r)), end=' | ')
             print('')
@@ -313,12 +291,15 @@ class TransformerModel(nn.Module):
                 input_ = init_t[step, :].unsqueeze(0).unsqueeze(0)
                 final_res.append(init[step, :][None, ...])
                 # 采样类型
-                h, y_type, memory = self.forward(input_, memory, is_training=False)
+
+            inp = init_t.unsqueeze(0)
+            memory = self.encode(inp)
 
             print('------ generate ------')
+            state = None
             while (True):
                 # sample others  采样其他的，音高，音长，力度等
-                next_arr, y_emotion = self.froward_output_sampling(h, y_type)
+                next_arr, state = self.froward_output_sampling(input_, memory, state=state)
                 if next_arr is None:
                     return None, None
 
@@ -331,8 +312,6 @@ class TransformerModel(nn.Module):
                 # forward
                 input_ = torch.from_numpy(next_arr).long().cuda()
                 input_ = input_.unsqueeze(0).unsqueeze(0)
-                h, y_type, memory = self.forward_hidden(
-                    input_, memory, is_training=False)
 
                 # end of sequence
                 if word2event['type'][next_arr[3]] == 'EOS':
@@ -347,40 +326,11 @@ class TransformerModel(nn.Module):
 
         return final_res, generated_key
 
-    def froward_output_sampling(self, h, y_type, is_training=False):
-        '''
-        for inference
-        '''
 
-        # sample type
-        y_type_logit = y_type[0, :]  # token class size
-        cur_word_type = utils.sampling(y_type_logit, p=0.90, is_training=is_training)  # int
-        if cur_word_type is None:
-            return None, None
+    def froward_output_sampling(self, input_, memory, is_training=False, state=None):
+        y_tempo, y_chord, y_type, y_barbeat, y_pitch, y_duration, y_velocity, y_emotion, state = self.decode_and_output(input_, memory, state=state)
 
-        if is_training:
-            # unsqueeze 升维  squeeze 降维，维度=1的维去掉
-            type_word_t = cur_word_type.long().unsqueeze(0).unsqueeze(0)
-        else:
-            type_word_t = torch.from_numpy(
-                np.array([cur_word_type])).long().cuda().unsqueeze(0)  # shape = (1,1)
-
-        tf_skip_type = self.word_emb_type(type_word_t).squeeze(0)  # shape = (1, embd_size)
-
-        # concat
-        y_concat_type = torch.cat([h, tf_skip_type], dim=-1)
-        y_ = self.project_concat_type(y_concat_type)
-
-        # project other
-        y_tempo = self.proj_tempo(y_)
-        y_chord = self.proj_chord(y_)
-        y_barbeat = self.proj_barbeat(y_)
-
-        y_pitch = self.proj_pitch(y_)
-        y_duration = self.proj_duration(y_)
-        y_velocity = self.proj_velocity(y_)
-        y_emotion = self.proj_emotion(y_)
-
+        cur_word_type = utils.sampling(y_type, p=0.99, is_training=is_training)
         # sampling gen_cond
         cur_word_tempo = utils.sampling(y_tempo, t=1.2, p=0.9, is_training=is_training)
         cur_word_barbeat = utils.sampling(y_barbeat, t=1.2, is_training=is_training)
@@ -430,7 +380,7 @@ class TransformerModel(nn.Module):
                 cur_word_emotion
             ])
 
-        return next_arr, y_emotion
+        return next_arr, state
 
 
 class Generator(nn.Module):
@@ -446,6 +396,4 @@ class Generator(nn.Module):
         super(Generator, self).__init__()
 
     def forward(self, x):
-
-
         return F.softmax(self.proj(x), dim=-1)

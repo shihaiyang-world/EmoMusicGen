@@ -96,7 +96,8 @@ def generate():
     transformer_model.cuda()
     transformer_model.eval()
     print('[*] load model from:', path_saved_ckpt)
-    transformer_model.load_state_dict(torch.load(path_saved_ckpt))
+    load = torch.load(path_saved_ckpt)
+    transformer_model.load_state_dict(load, strict=False)
 
     # 生成音乐
     song_time_list = []
@@ -104,96 +105,14 @@ def generate():
     start_time = time.time()
 
     path_outfile = os.path.join(path_gendir, 'emo_{}_{}'.format(str(emotion_tag), utils.get_random_string(10)))
-    # res, _ = transformer_model.generate_from_scratch(dictionary, emotion_tag)
 
-    target_emotion = [0, 0, 0, 1, 0, 0, 0, emotion_tag]
-
-    # init = np.array([
-    #     target_emotion,  # emotion
-    #     [0, 0, 1, 2, 0, 0, 0, 0]  # bar
-    # ])
-    # init_t = torch.from_numpy(init).long().cuda()
-    inp = init.unsqueeze(0)
-    inp = inp.cuda()
-
-    classes = word2event.keys()
-    def print_word_cp(cp):
-        result = [word2event[k][cp[idx]] for idx, k in enumerate(classes)]
-        for r in result:
-            print('{:15s}'.format(str(r)), end=' | ')
-        print('')
-
-    cnt_bar = 0
-
-    # 采样类型
-    for step in range(1, 1000):
-        # 采样类型
-        memory = transformer_model.encode(inp)
-        y_tempo, y_chord, y_type, y_barbeat, y_pitch, y_duration, y_velocity, y_emotion, state = transformer_model.decode_and_output(inp, memory)
-
-        y_tempo = y_tempo[:, -1, :].unsqueeze(0)
-        y_chord = y_chord[:, -1, :].unsqueeze(0)
-        y_type = y_type[:, -1, :].unsqueeze(0)
-        y_barbeat = y_barbeat[:, -1, :].unsqueeze(0)
-        y_pitch = y_pitch[:, -1, :].unsqueeze(0)
-        y_duration = y_duration[:, -1, :].unsqueeze(0)
-        y_velocity = y_velocity[:, -1, :].unsqueeze(0)
-        y_emotion = y_emotion[:, -1, :].unsqueeze(0)
-        y_tempo, y_chord, y_type, y_barbeat, y_pitch, y_duration, y_velocity, y_emotion = nn.Softmax(dim=-1)(y_tempo), nn.Softmax(dim=-1)(y_chord), nn.Softmax(dim=-1)(y_type), nn.Softmax(dim=-1)(
-            y_barbeat), nn.Softmax(dim=-1)(y_pitch), nn.Softmax(dim=-1)(y_duration), nn.Softmax(dim=-1)(
-            y_velocity), nn.Softmax(dim=-1)(y_emotion)
-
-
-        cur_word_type = utils.sampling(y_type, p=0.90, is_training=is_training)
-        # 温度采样  softmax   temperature越大，越随机(超出原来的概率分布范围)，越小，越确定(接近原来的概率分布范围)
-        cur_word_tempo = utils.sampling(y_tempo, t=0.9, p=0.9, is_training=is_training)
-        cur_word_barbeat = utils.sampling(y_barbeat, t=0.9, is_training=is_training)
-        cur_word_chord = utils.sampling(y_chord, p=0.1, is_training=is_training)
-        cur_word_pitch = utils.sampling(y_pitch, p=0.1, is_training=is_training)
-        cur_word_duration = utils.sampling(y_duration, t=0.9, p=0.9, is_training=is_training)
-        cur_word_velocity = utils.sampling(y_velocity, t=0.9, is_training=is_training)
-
-        # cur_word_emotion =utils.sampling(y_emotion, t=1, is_training=is_training)
-        cur_word_emotion = 0
-        next_arr = np.array([
-            cur_word_tempo,
-            cur_word_chord,
-            cur_word_barbeat,
-            cur_word_type,
-            cur_word_pitch,
-            cur_word_duration,
-            cur_word_velocity,
-            cur_word_emotion
-        ])
-
-        print('bar:', cnt_bar, end='  ==')
-        print_word_cp(next_arr)
-        if word2event['type'][next_arr[3]] == 'EOS':
-            continue
-
-        if word2event['bar-beat'][next_arr[2]] == 'Bar':
-            cnt_bar += 1
-
-        # cuda
-        arr = torch.from_numpy(next_arr).long().cuda()
-        arr = arr.unsqueeze(0).unsqueeze(0)
-        inp = torch.cat(
-            [inp, arr],
-            dim=1
-        )
-
-        #
-        # if res is None:
-        #     return
-        #
-        # inp 转numpy
-    inp = inp.squeeze().cpu().detach().numpy()
-    np.save(path_outfile + '.npy', inp)
-    utils.write_midi(inp, path_outfile + '.mid', word2event)
+    # 生成音乐
+    final_res, generated_key = transformer_model.generate_from_scratch(dictionary, emotion_tag)
+    np.save(path_outfile + '.npy', final_res)
+    utils.write_midi(final_res, path_outfile + '.mid', word2event)
     print('save to:', path_outfile + '.mid')
-        #
     song_time = time.time() - start_time
-    word_len = len(inp)
+    word_len = len(final_res)
     print('song time:', song_time)
     print('word_len:', word_len)
 

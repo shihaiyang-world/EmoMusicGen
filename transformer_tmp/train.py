@@ -29,7 +29,7 @@ parser.add_argument("--load_dict", default="dictionary.pkl", type=str)
 parser.add_argument("--exp_name", default='output' , type=str)
 parser.add_argument("--path_gendir", default='midigen' , type=str)
 parser.add_argument("--emo_tag", default=2, type=int)
-parser.add_argument('--epoch', default=10, type=int)
+parser.add_argument('--epoch', default=2, type=int)
 args = parser.parse_args()
 
 path_data_root = args.data_root
@@ -124,8 +124,8 @@ def train():
             optimizer.step()
 
             epoch_loss += loss.item()
-
-            print('epoch:{}/{}  batch:{}/{} | Loss: {:06f} \r'.format((epoch), epochs, i, num_batch, loss))
+            if i % 50 == 0:
+                print('epoch:{}/{}  batch:{}/{} | Loss: {:06f} \r'.format((epoch), epochs, i, num_batch, loss))
 
         # epoch loss
         runtime = time.time() - start_time
