@@ -30,6 +30,9 @@ parser.add_argument("--exp_name", default='output' , type=str)
 parser.add_argument("--path_gendir", default='midigen' , type=str)
 parser.add_argument("--emo_tag", default=2, type=int)
 parser.add_argument('--epoch', default=2, type=int)
+parser.add_argument('--layers', default=4, type=int)
+parser.add_argument('--batch', default=4, type=int)
+parser.add_argument('--heads', default=8, type=int)
 args = parser.parse_args()
 
 path_data_root = args.data_root
@@ -37,11 +40,11 @@ path_exp = 'exp/' + args.exp_name
 path_gendir = 'exp/' + args.path_gendir
 emotion_tag = args.emo_tag
 epochs = args.epoch
-batch_size = 4
+batch_size = args.batch
 D_MODEL = 512
-HEADS = 8
-ENCODER_LAYER = 4
-DECODER_LAYER = 4
+HEADS = args.heads
+ENCODER_LAYER = args.layers
+DECODER_LAYER = args.layers
 learning_rate = 0.0001
 
 path_train_data = os.path.join(path_data_root, args.path_train_data + '_data.npz')
