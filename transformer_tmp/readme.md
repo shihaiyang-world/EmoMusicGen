@@ -94,3 +94,12 @@ nn.Linear **本质就是由一个特征空间线性变换到另一个特征空�
 
 ![img_1.png](img_1.png)
 MultiAttention 代码 单独拎出去
+
+
+
+## 0324 周日
+
+昨天看到了Emopia那个数据集 compound word 的数据集格式。
+所以改下transformer，看能不能把生成的音乐改对。
+应该是EMO Metrical:Bar Metrical:Beat Note*n Metrical:Bar Metrical:Beat Note*n EOS  的生成格式。
+

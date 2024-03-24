@@ -3,7 +3,7 @@
 三种mask。各类mask的作用
 
 1. Encoder的padding mask     换成等长的词向量
-2. masked multi-head attention 序列因果mask？  
+2. masked multi-head attention 序列因果mask，causal mask 就是防止看到后面内容的一种mask
 3. encoder memory和decoder交叉注意力 mask和encoder类似，涉及两个不同序列，长度可能不同。
 
 ### 总结
@@ -64,14 +64,11 @@ tensor([[[-0.9194,  0.3338,  0.7215, -1.2306,  0.9512, -0.1863],
        grad_fn=<EmbeddingBackward>)
 ```
 
-
-
 ### 2. Position embedding
 
 **注意力机制更多的是关注词与词之间的重要程度，而不关心句子中词语位置的顺序关系。**
 
 例如：“从北京开往济南的列车”与“从济南开往北京的列车”，词向量表示并不能对两句话中的“北京”进行区分，其编码是一样的。但是在真实语境中，两个词语所表达的语义并不相同，第一个表示的是起始站，另一个表示的是终点站，两个词所表达的语义信息并不相同
-
 
 **因此以 Attention 结构为主的大规模模型都需要位置编码来辅助学习顺序信息**
 
@@ -124,9 +121,9 @@ tensor([[[ 0.0000,  1.0000,  0.0000,  1.0000,  0.0000,  1.0000],
 
 由于每个特征句子的长度不同，经过 padding 之后每个句子的长度一致。在特征序列中，第一个句子只包含 2 个单词，用 1 来表示，后两个填充的位置用 0 值来表示。因此将特征序列表示为 [[1, 1, 0, 0], [1, 1, 1, 1]]，其 shape=[2, 4]
 
-接下来<font color='red'>**构建邻接矩阵 shape=[2, 4, 4]**</font>，其中有 4 行和 4 列的单词，**邻接矩阵中每个元素代表两两单词之间的对应关系**​**，若为 1 则代表有效单词，若为 0 则代表无效单词，是通过 padding 得到的。**
+接下来<font color='red'>**构建邻接矩阵 shape=[2, 4, 4]**</font>，其中有 4 行和 4 列的单词，**邻接矩阵中每个元素代表两两单词之间的对应关系****，若为 1 则代表有效单词，若为 0 则代表无效单词，是通过 padding 得到的。**
 
-接下来只要**将邻接矩阵中所有元素为 0 的区域都打上掩码，<font color='red'>**​将该位置的元素值变得非常小**​</font>。
+接下来只要**将邻接矩阵中所有元素为 0 的区域都打上掩码，<font color='red'>**将该位置的元素值变得非常小**</font>。
 
 下面的第一个矩阵是经过 padding 后的特征序列的邻接矩阵；第二个矩阵是随机生成的输入序列；第三个矩阵是经过掩码后的序列，将 mask 的元素值变得非常小，<font color='red'>**这样在计算交叉熵损失时，经过 softmax 函数后这些做过 padding 的元素变得非常小，在反向传播过程中对模型的整体影响较小。**</font>
 
@@ -165,12 +162,7 @@ tensor([[[-1.5094e-01, -2.5137e-01, -1.0000e+10, -1.0000e+10],
          [ 3.4751e-01, -1.3290e-01, -1.0455e+00, -9.6713e-01]]])
 ```
 
-
-
 [Transformer 中的 Encoder 机制，参考](https://blog.csdn.net/dgvv4/article/details/125507206)
-
-
-
 
 ---
 
@@ -178,7 +170,6 @@ tensor([[[-1.5094e-01, -2.5137e-01, -1.0000e+10, -1.0000e+10],
 
 nclass = [56, 135, 18, 4, 87, 18, 42, 5]
 ![img_12.png](img_12.png)
-
 
 emopia中的训练阶段。
 把每个类型都embedding一下，最后concat在一起，当成input进行训练，训练数据长度是1024
@@ -190,10 +181,10 @@ input经过一个embedding+concat，
 
 再用全连接投射了一个type出来。
 
-这有一个疑问，所有的embedding之后concat在一起了，再用全连接投射，这有啥用呢？
+这有一个疑问，所有的embedding之后concat在一起了，再用全连接投射，这有啥用呢？  参考了GoogleT5网络找到了原论文，在emopia demo readme中。
+
 
 
 
 参考黑盒解析transformer[Pytorch中 nn.Transformer的使用详解与Transformer的黑盒讲解](https://github.com/iioSnail/chaotic-transformer-tutorials/blob/master/nn.Transformer_demo.ipynb)
-
 

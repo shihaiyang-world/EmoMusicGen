@@ -73,6 +73,9 @@ def generate():
     name = 'loss_high'
     path_saved_ckpt = os.path.join(path_ckpt, name + '_params.pt')
 
+    dataset = PEmoDataset(path_train_data, path_train_data_cls_idx)
+    init = dataset.train_x[0][0:10, :]
+
     # load
     dictionary = pickle.load(open(path_dictionary, 'rb'))
     event2word, word2event = dictionary
@@ -105,12 +108,13 @@ def generate():
 
     target_emotion = [0, 0, 0, 1, 0, 0, 0, emotion_tag]
 
-    init = np.array([
-        target_emotion,  # emotion
-        [0, 0, 1, 2, 0, 0, 0, 0]  # bar
-    ])
-    init_t = torch.from_numpy(init).long().cuda()
-    inp = init_t.unsqueeze(0)
+    # init = np.array([
+    #     target_emotion,  # emotion
+    #     [0, 0, 1, 2, 0, 0, 0, 0]  # bar
+    # ])
+    # init_t = torch.from_numpy(init).long().cuda()
+    inp = init.unsqueeze(0)
+    inp = inp.cuda()
 
     classes = word2event.keys()
     def print_word_cp(cp):

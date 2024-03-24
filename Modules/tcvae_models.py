@@ -203,7 +203,7 @@ class CTCVAE(nn.Module):
 
         # transformer
         if is_training:
-            # mask 邻接矩阵  句子中词是否mask
+            # mask 邻接矩阵  句子中词是否mask  对角线矩阵
             attn_mask = TriangularCausalMask_local(pos_emb.size(1), device=x.device)
             # 定义Transformer结构
             embedding_encoder = self.transformer_encoder(pos_emb, attn_mask)  # y: b x s x d_model

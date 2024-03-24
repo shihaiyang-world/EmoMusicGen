@@ -68,7 +68,6 @@ return 0.5 * np.sum((y-t) ** 2)
 
 # 框架中实现 loss均方误差
 reconstruction_loss = tf.reduce_mean(tf.square(outputs - X)) # MSE
-
 ```
 
 MNIST手写数字识别程序中中，一张图片的label为2，进行one-hot编码后，可以获得t，其中
@@ -82,7 +81,6 @@ y = [0.1, 0.05, 0.6, 0.0, 0.05, 0.1, 0.0, 0.1, 0.0, 0.0]，
 
 交叉熵损失函数在神经网络中做分类问题时，由于交叉熵涉及到计算每个类别的概率，**所以交叉熵几乎每次都和sigmoid(或softmax)函数一起出现**，用于在神经网络最后一层进行输出每种类别的概率形式。
 神经网络最后一层得到每个类别的得分scores（也叫**logits**）；该得分经过sigmoid或softmax函数获得概率输出；模型预测的类别概率输出与真实类别的one hot形式进行交叉熵损失函数的计算。在tensorflow中，交叉熵损失函数主要有以下几种形式：
-
 
 公式：
 
@@ -102,20 +100,19 @@ def cross_entropy_error(y, t):
 # tensorflow中实现
 
 tf.nn.sigmoid_cross_entropy_with_logits(_sentinel=None,labels=None, logits=None, name=None)
-
 ```
 
 上面实现代码，加上了一个微小的delta，是因为当出现np.log(0)时，np.log(0)会变为负无穷大，添加一个微小值可以防止负无穷大的发生。
 
 使用「均方误差」中的y、t作为参数，调用 `cross_entropy_error(np.array(y), np.array(t))`，获得结果 0.510825457099338
 
-为了提高训练效率一般都会在每次迭代中使用小批量进行训练，因此计算损失函数时必须将所有的训练数据作为对象。即，如果训练数据有100个，我们就需要将这100个​**损失函数的总和作为学习的指标**​。
+为了提高训练效率一般都会在每次迭代中使用小批量进行训练，因此计算损失函数时必须将所有的训练数据作为对象。即，如果训练数据有100个，我们就需要将这100个**损失函数的总和作为学习的指标**。
 
 计算公式为： $ E=-\frac{1}{N} \sum_n \sum_k t_{nk} log_{nk} $，**也就是把每一个输出loss进行加总求和**
 
 ![img_4.png](img_4.png)
 
-* 具有多个输出的神经网络可能具有​**多个损失函数**​（每个输出对应一个损失函数）。但是，梯度下降过程必须基于单个标量损失值。因此，<font color='red'>对于具有多个损失函数的网络，需要将所有损失函数取平均，变为一个标量值。</font>
+* 具有多个输出的神经网络可能具有**多个损失函数**（每个输出对应一个损失函数）。但是，梯度下降过程必须基于单个标量损失值。因此，<font color='red'>对于具有多个损失函数的网络，需要将所有损失函数取平均，变为一个标量值。</font>
 
 ```python
 # tensorflow中实现
@@ -152,12 +149,9 @@ def categorical_crossentropy(y_true,
  print(loss.numpy())
  
  array([0.0513, 2.303], dtype=float32)
-
 ```
 
-
 [tensorflow中交叉熵实现参考链接](https://blog.csdn.net/FrankieHello/article/details/118188350)
-
 
 [参考链接:# 常见损失函数 & 损失函数选择方法](https://blog.csdn.net/donaldsy/article/details/101295422)
 
@@ -165,13 +159,21 @@ def categorical_crossentropy(y_true,
 [LaTeX表示参考2](https://blog.csdn.net/qq_46092061/article/details/121862287)
 
 ![img_5.png](img_5.png)
+加^号 ：      $\hat{x}$
+加横线 ：    $\overline{x}$
+加宽^：       $\widehat{x}$
+加波浪线 ： $\widetilde{x}$
+加一个点 ： $\dot{x}$
+加两个点：  $\ddot{x}$
+
+花体 \mathcal
+$\mathcal L$: 常用来表示损失函数
+$\mathcal D$: 常用来表示样本集
+$\mathcal N$: 常用来表示高斯分布
+空心 \mathbb
+$\mathbb R$: 常用来表示张量
+$\complement_AB$ :表示绝对补集
+
 
 ### 优化器
-
-
-
-
-
-
-
 

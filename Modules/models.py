@@ -44,7 +44,9 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x):
         # 计算每句话每个词的位置编码
-        x = x + self.pe[:, :x.size(1), :]
+        size = x.size(1)
+        size_ = self.pe[:, :size, :]
+        x = x + size_
         return self.dropout(x)
 
 
@@ -103,6 +105,9 @@ class CTCVAE(nn.Module):
         self.proj_emotion = nn.Linear(self.d_model, self.n_token[7])
 
 
+    # predict(b,class, seq)=torch.Size([4, 56, 1024])   batch=4， 56个class  ， 1024维度就是seq len
+    # traget(b,seq)=torch.Size([4, 1024])    batch=4， 1024是指1024的seq中各个的真实类别    1024个每个的真实值，与预测的56个类别概率比较，算loss。
+    # 用prodect预测的class中的预测概率跟target比较
     def compute_loss(self, predict, target, loss_mask):
         loss = self.loss_func(predict, target)
         loss = loss * loss_mask

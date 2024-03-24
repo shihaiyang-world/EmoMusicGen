@@ -20,7 +20,7 @@ import json
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--status', default='generate', choices=['train','generate'])
+parser.add_argument('--status', default='train', choices=['train','generate'])
 parser.add_argument('--msg', default='_')
 parser.add_argument('--epoch', default=100, type=int)
 parser.add_argument('--batch_size', default=4)
@@ -162,6 +162,7 @@ def train():
 
     train_loader = prep_dataloader(batch_size)
 
+
     # create saver  保存模型，loss等
     saver_agent = saver.Saver(path_exp)
 
@@ -200,6 +201,8 @@ def train():
 
         for bidx, (batch_x, batch_y, batch_mask) in enumerate(train_loader):  # num_batch
             saver_agent.global_step_increment()
+
+            print(batch_x[0, 0:50, :], batch_y[0, 0:50, :])
 
             batch_x = batch_x.cuda()
             batch_y = batch_y.cuda()
@@ -294,6 +297,9 @@ def generate():
 
     ctv_model.load_state_dict(torch.load(path_saved_ckpt))
 
+    n_parameters = network_paras(ctv_model)
+    print('n_parameters: {:,}'.format(n_parameters))
+
     # 生成音乐
     start_time = time.time()
     song_time_list = []
@@ -346,5 +352,6 @@ if __name__ == '__main__':
 
     elif MODE == 'generate':
         generate()
+
 
 

@@ -37,11 +37,11 @@ path_exp = 'exp/' + args.exp_name
 path_gendir = 'exp/' + args.path_gendir
 emotion_tag = args.emo_tag
 epochs = args.epoch
-batch_size = 32
+batch_size = 4
 D_MODEL = 512
 HEADS = 8
-ENCODER_LAYER = 2
-DECODER_LAYER = 2
+ENCODER_LAYER = 4
+DECODER_LAYER = 4
 learning_rate = 0.0001
 
 path_train_data = os.path.join(path_data_root, args.path_train_data + '_data.npz')
@@ -86,6 +86,9 @@ def train():
     for key in event2word.keys():
         n_class.append(len(dictionary[0][key]))
     # 几个类别的token数量，以及embedding的维度
+    # [56,   127,   18,      4,    85,    18,       41,       5]
+    # tempo  chord  barbeat  type  pitch  duration  velocity  emotion
+    # [128,   256,   64,     32,   512,   128,      128,      128]
     emb_sizes = [128, 256, 64, 32, 512, 128, 128, 128]
 
     # 定义模型
@@ -105,6 +108,9 @@ def train():
         for i, (src_seq, tgt_seq, mask) in enumerate(train_loader):
             src_seq = src_seq.cuda()
             tgt_seq = tgt_seq.cuda()
+            # 用于处理非定长序列的padding mask（非官方命名）；
+            # 用于防止标签泄露的sequence mask（非官方命名）。
+            # batch_mask 是padding mask，每个seq是1024，但是不是所有的都有数据，所以需要mask batch_mask==1的是有数据的，==0的是padding的
             batch_mask = mask.cuda()
 
             # out是经过softmax之后的概率分布，最大的值对应的index，然后再去字典中查询，就知道预测的词是什么了。
