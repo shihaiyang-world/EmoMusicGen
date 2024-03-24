@@ -22,25 +22,49 @@ import utils
 import json
 
 import argparse
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.utils.data as data
+import math
+import copy
+import pickle
+import numpy as np
+from torch.utils.data import DataLoader
+from data_processor import PEmoDataset
+import os
+from public_layer import network_paras
+from models import TransformerModel
+import time, datetime
+import saver
+import utils
+import json
+import argparse
+
 parser = argparse.ArgumentParser(description='PyTorch Transformer')
 parser.add_argument("--path_train_data", default='emopia', type=str)
 parser.add_argument("--data_root", default='../co-representation/', type=str)
 parser.add_argument("--load_dict", default="dictionary.pkl", type=str)
 parser.add_argument("--exp_name", default='output' , type=str)
 parser.add_argument("--path_gendir", default='midigen' , type=str)
-parser.add_argument("--emo_tag", default=1, type=int)
+parser.add_argument("--emo_tag", default=2, type=int)
+parser.add_argument('--epoch', default=2, type=int)
+parser.add_argument('--layers', default=4, type=int)
+parser.add_argument('--batch', default=4, type=int)
+parser.add_argument('--heads', default=8, type=int)
 args = parser.parse_args()
 
 path_data_root = args.data_root
 path_exp = 'exp/' + args.exp_name
 path_gendir = 'exp/' + args.path_gendir
 emotion_tag = args.emo_tag
-epochs = 10
-batch_size = 32
+epochs = args.epoch
+batch_size = args.batch
 D_MODEL = 512
-HEADS = 8
-ENCODER_LAYER = 2
-DECODER_LAYER = 2
+HEADS = args.heads
+ENCODER_LAYER = args.layers
+DECODER_LAYER = args.layers
 learning_rate = 0.0001
 
 path_train_data = os.path.join(path_data_root, args.path_train_data + '_data.npz')
@@ -51,6 +75,7 @@ path_train_data_cls_idx = os.path.join(path_data_root, args.path_train_data + '_
 assert os.path.exists(path_train_data)
 assert os.path.exists(path_dictionary)
 assert os.path.exists(path_train_idx)
+
 
 
 
